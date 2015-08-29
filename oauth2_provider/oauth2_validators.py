@@ -5,6 +5,7 @@ import binascii
 import logging
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth import authenticate
 from django.core.exceptions import ObjectDoesNotExist
@@ -285,6 +286,7 @@ class OAuth2Validator(RequestValidator):
                   scope=' '.join(request.scopes))
         g.save()
 
+    @transaction.atomic
     def save_bearer_token(self, token, request, *args, **kwargs):
         """
         Save access and refresh token, If refresh token is issued, remove old refresh tokens as
