@@ -165,7 +165,25 @@ class Grant(models.Model):
 
 
 @python_2_unicode_compatible
-class AccessToken(models.Model):
+class AbstractToken(models.Model):
+    token = models.CharField(max_length=255, db_index=True)
+
+    class Meta:
+        abstract = True
+
+    def revoke(self):
+        """
+        Convenience method to uniform tokens' interface, for now
+        simply remove this token from the database in order to revoke it.
+        """
+        self.delete()
+
+    def __str__(self):
+        return self.token
+
+
+@python_2_unicode_compatible
+class AccessToken(AbstractToken):
     """
     An AccessToken instance represents the actual access token to
     access user's resources, as in :rfc:`5`.
@@ -178,9 +196,10 @@ class AccessToken(models.Model):
     * :attr:`expires` Date and time of token expiration, in DateTime format
     * :attr:`scope` Allowed scopes
     """
-    user = models.ForeignKey(AUTH_USER_MODEL, blank=True, null=True)
-    token = models.CharField(max_length=255, db_index=True)
-    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL)
+    user = models.ForeignKey(AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             blank=True, null=True)
+    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL,
+                                    on_delete=models.CASCADE)
     expires = models.DateTimeField()
     scope = models.TextField(blank=True)
 
@@ -212,19 +231,9 @@ class AccessToken(models.Model):
 
         return resource_scopes.issubset(provided_scopes)
 
-    def revoke(self):
-        """
-        Convenience method to uniform tokens' interface, for now
-        simply remove this token from the database in order to revoke it.
-        """
-        self.delete()
-
-    def __str__(self):
-        return self.token
-
 
 @python_2_unicode_compatible
-class RefreshToken(models.Model):
+class RefreshToken(AbstractToken):
     """
     A RefreshToken instance represents a token that can be swapped for a new
     access token when it expires.
@@ -237,21 +246,16 @@ class RefreshToken(models.Model):
     * :attr:`access_token` AccessToken instance this refresh token is
                            bounded to
     """
-    user = models.ForeignKey(AUTH_USER_MODEL)
-    token = models.CharField(max_length=255, db_index=True)
-    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL)
+    user = models.ForeignKey(AUTH_USER_MODEL, on_delete=models.CASCADE)
+    application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL,
+                                    on_delete=models.CASCADE)
     access_token = models.OneToOneField(AccessToken,
+                                        on_delete=models.CASCADE,
                                         related_name='refresh_token')
 
     def revoke(self):
-        """
-        Delete this refresh token along with related access token
-        """
-        AccessToken.objects.get(id=self.access_token.id).revoke()
-        self.delete()
-
-    def __str__(self):
-        return self.token
+        self.access_token.revoke()
+        super(RefreshToken, self).revoke()
 
 
 def get_application_model():
