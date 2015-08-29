@@ -55,8 +55,8 @@ class AbstractApplication(models.Model):
         (GRANT_CLIENT_CREDENTIALS, _('Client credentials')),
     )
 
-    client_id = models.CharField(max_length=100, unique=True,
-                                 default=generate_client_id, db_index=True)
+    client_id = models.CharField(max_length=100, default=generate_client_id,
+                                 unique=True)
     user = models.ForeignKey(AUTH_USER_MODEL, related_name="%(app_label)s_%(class)s")
     help_text = _("Allowed URIs list, space separated")
     redirect_uris = models.TextField(help_text=help_text,
@@ -65,7 +65,7 @@ class AbstractApplication(models.Model):
     authorization_grant_type = models.CharField(max_length=32,
                                                 choices=GRANT_TYPES)
     client_secret = models.CharField(max_length=255, blank=True,
-                                     default=generate_client_secret, db_index=True)
+                                     default=generate_client_secret, unique=True)
     name = models.CharField(max_length=255, blank=True)
     skip_authorization = models.BooleanField(default=False)
 
@@ -147,7 +147,7 @@ class Grant(models.Model):
     * :attr:`scope` Required scopes, optional
     """
     user = models.ForeignKey(AUTH_USER_MODEL)
-    code = models.CharField(max_length=255, db_index=True)  # code comes from oauthlib
+    code = models.CharField(max_length=255, unique=True)  # code comes from oauthlib
     application = models.ForeignKey(oauth2_settings.APPLICATION_MODEL)
     expires = models.DateTimeField()
     redirect_uri = models.CharField(max_length=255)
@@ -168,7 +168,7 @@ class Grant(models.Model):
 
 @python_2_unicode_compatible
 class AbstractToken(models.Model):
-    token = models.CharField(max_length=255, db_index=True)
+    token = models.CharField(max_length=255, unique=True)
 
     class Meta:
         abstract = True
@@ -184,7 +184,6 @@ class AbstractToken(models.Model):
         return self.token
 
 
-@python_2_unicode_compatible
 class AccessToken(AbstractToken):
     """
     An AccessToken instance represents the actual access token to
@@ -241,7 +240,6 @@ class AccessToken(AbstractToken):
         return {name: desc for name, desc in oauth2_settings.SCOPES.items() if name in self.scope.split()}
 
 
-@python_2_unicode_compatible
 class RefreshToken(AbstractToken):
     """
     A RefreshToken instance represents a token that can be swapped for a new
