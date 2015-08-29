@@ -332,18 +332,18 @@ class OAuth2Validator(RequestValidator):
         refresh_token_code = token.get('refresh_token', None)
 
         if refresh_token_code:
-            # an instance of `RefreshToken` that matches the old refresh code.
-            # Set on the request in `validate_refresh_token`
-            refresh_token_instance = getattr(request, 'refresh_token_instance', None)
+            if not self.rotate_refresh_token(request):
+                try:
+                    access_token = AccessToken.objects.select_for_update().get(
+                        refresh_token__token=refresh_token_code
+                    )
+                except AccessToken.DoesNotExist:
+                    access_token = None
+            else:
+                access_token = None
 
             # If we are to reuse tokens, and we can: do so
-            if not self.rotate_refresh_token(request) and \
-                isinstance(refresh_token_instance, RefreshToken) and \
-                    refresh_token_instance.access_token:
-
-                access_token = AccessToken.objects.select_for_update().get(
-                    pk=refresh_token_instance.access_token.pk
-                )
+            if access_token:
                 access_token.user = request.user
                 access_token.scope = token['scope']
                 access_token.expires = expires
@@ -353,14 +353,8 @@ class OAuth2Validator(RequestValidator):
 
             # else create fresh with access & refresh tokens
             else:
-                # revoke existing tokens if possible
-                if isinstance(refresh_token_instance, RefreshToken):
-                    try:
-                        refresh_token_instance.revoke()
-                    except (AccessToken.DoesNotExist, RefreshToken.DoesNotExist):
-                        pass
-                    else:
-                        setattr(request, 'refresh_token_instance', None)
+                if request.refresh_token:
+                    AccessToken.objects.filter(refresh_token__token=request.refresh_token).delete()
 
                 access_token = self._create_access_token(expires, request, token)
 
@@ -425,9 +419,7 @@ class OAuth2Validator(RequestValidator):
         return False
 
     def get_original_scopes(self, refresh_token, request, *args, **kwargs):
-        # Avoid second query for RefreshToken since this method is invoked *after*
-        # validate_refresh_token.
-        rt = request.refresh_token_instance
+        rt = RefreshToken.objects.get(token=refresh_token)
         return rt.access_token.scope
 
     def validate_refresh_token(self, refresh_token, client, request, *args, **kwargs):
@@ -438,9 +430,6 @@ class OAuth2Validator(RequestValidator):
         try:
             rt = RefreshToken.objects.get(token=refresh_token)
             request.user = rt.user
-            request.refresh_token = rt.token
-            # Temporary store RefreshToken instance to be reused by get_original_scopes.
-            request.refresh_token_instance = rt
             return rt.application == client
 
         except RefreshToken.DoesNotExist:
