@@ -173,13 +173,6 @@ class AbstractToken(models.Model):
     class Meta:
         abstract = True
 
-    def revoke(self):
-        """
-        Convenience method to uniform tokens' interface, for now
-        simply remove this token from the database in order to revoke it.
-        """
-        self.delete()
-
     def __str__(self):
         return self.token
 
@@ -259,10 +252,6 @@ class RefreshToken(AbstractToken):
     access_token = models.OneToOneField(AccessToken,
                                         on_delete=models.CASCADE,
                                         related_name='refresh_token')
-
-    def revoke(self):
-        self.access_token.revoke()
-        super(RefreshToken, self).revoke()
 
 
 def get_application_model():

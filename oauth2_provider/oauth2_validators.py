@@ -299,11 +299,7 @@ class OAuth2Validator(RequestValidator):
         in rfc:`6`
         """
         if request.refresh_token:
-            # remove used refresh token
-            try:
-                RefreshToken.objects.get(token=request.refresh_token).revoke()
-            except RefreshToken.DoesNotExist:
-                assert()  # TODO though being here would be very strange, at least log the error
+            RefreshToken.objects.filter(token=request.refresh_token).delete()
 
         expires = timezone.now() + timedelta(seconds=oauth2_settings.ACCESS_TOKEN_EXPIRE_SECONDS)
         if request.grant_type == 'client_credentials':
@@ -347,11 +343,10 @@ class OAuth2Validator(RequestValidator):
 
         token_type = token_types.get(token_type_hint, AccessToken)
         try:
-            token_type.objects.get(token=token).revoke()
+            token_type.objects.filter(token=token).delete()
         except ObjectDoesNotExist:
             for other_type in [_t for _t in token_types.values() if _t != token_type]:
-                # slightly inefficient on Python2, but the queryset contains only one instance
-                list(map(lambda t: t.revoke(), other_type.objects.filter(token=token)))
+                other_type.objects.filter(token=token).delete()
 
     def validate_user(self, username, password, client, request, *args, **kwargs):
         """
