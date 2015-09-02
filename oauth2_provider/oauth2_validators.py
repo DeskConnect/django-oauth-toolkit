@@ -315,7 +315,8 @@ class OAuth2Validator(RequestValidator):
                     application=request.client,
                     access_token=access_token
                 )
-                refresh_token.save()
+                with transaction.atomic():
+                    refresh_token.save()
             except IntegrityError:
                 RefreshToken.objects.filter(user=request.user, token=token['refresh_token'], application=request.client).update(access_token=access_token)
 
