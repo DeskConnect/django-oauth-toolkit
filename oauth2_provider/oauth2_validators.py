@@ -6,7 +6,7 @@ import binascii
 import logging
 from datetime import timedelta
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.utils import timezone
 from django.contrib.auth import authenticate
 from django.core.exceptions import ObjectDoesNotExist
@@ -314,13 +314,16 @@ class OAuth2Validator(RequestValidator):
         access_token.save()
 
         if 'refresh_token' in token:
-            refresh_token = RefreshToken(
-                user=request.user,
-                token=token['refresh_token'],
-                application=request.client,
-                access_token=access_token
-            )
-            refresh_token.save()
+            try:
+                refresh_token = RefreshToken(
+                    user=request.user,
+                    token=token['refresh_token'],
+                    application=request.client,
+                    access_token=access_token
+                )
+                refresh_token.save()
+            except IntegrityError:
+                RefreshToken.objects.filter(user=request.user, token=token['refresh_token'], application=request.client).update(access_token=access_token)
 
         # TODO check out a more reliable way to communicate expire time to oauthlib
         token['expires_in'] = oauth2_settings.ACCESS_TOKEN_EXPIRE_SECONDS
