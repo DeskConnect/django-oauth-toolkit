@@ -8,8 +8,8 @@ from datetime import timedelta
 from django.utils import timezone
 from django.conf import settings
 from django.contrib.auth import authenticate
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 from oauthlib.oauth2 import RequestValidator
 
 from .compat import unquote_plus
@@ -392,21 +392,7 @@ class OAuth2Validator(RequestValidator):
         :param token_type_hint: access_token or refresh_token.
         :param request: The HTTP Request (oauthlib.common.Request)
         """
-        if token_type_hint not in ['access_token', 'refresh_token']:
-            token_type_hint = None
-
-        token_types = {
-            'access_token': AccessToken,
-            'refresh_token': RefreshToken,
-        }
-
-        token_type = token_types.get(token_type_hint, AccessToken)
-        try:
-            token_type.objects.get(token=token).revoke()
-        except ObjectDoesNotExist:
-            for other_type in [_t for _t in token_types.values() if _t != token_type]:
-                # slightly inefficient on Python2, but the queryset contains only one instance
-                list(map(lambda t: t.revoke(), other_type.objects.filter(token=token)))
+        AccessToken.objects.filter(Q(token=token) | Q(refresh_token__token=token)).delete()
 
     def validate_user(self, username, password, client, request, *args, **kwargs):
         """
