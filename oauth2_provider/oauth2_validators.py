@@ -332,39 +332,25 @@ class OAuth2Validator(RequestValidator):
         refresh_token_code = token.get('refresh_token', None)
 
         if refresh_token_code:
-            if not self.rotate_refresh_token(request):
-                try:
-                    access_token = AccessToken.objects.select_for_update().get(
-                        refresh_token__token=refresh_token_code
-                    )
-                except AccessToken.DoesNotExist:
-                    access_token = None
-            else:
-                access_token = None
+            access_token = self._create_access_token(expires, request, token)
 
-            # If we are to reuse tokens, and we can: do so
-            if access_token:
-                access_token.user = request.user
-                access_token.scope = token['scope']
-                access_token.expires = expires
-                access_token.token = token['access_token']
-                access_token.application = request.client
-                access_token.save()
-
-            # else create fresh with access & refresh tokens
-            else:
-                if request.refresh_token:
-                    AccessToken.objects.filter(refresh_token__token=request.refresh_token).delete()
-
-                access_token = self._create_access_token(expires, request, token)
-
+            try:
+                refresh_token = RefreshToken.objects.select_for_update().get(
+                    token=refresh_token_code
+                )
+            except RefreshToken.DoesNotExist:
                 refresh_token = RefreshToken(
                     user=request.user,
                     token=refresh_token_code,
-                    application=request.client,
-                    access_token=access_token
+                    application=request.client
                 )
-                refresh_token.save()
+
+            refresh_token.access_token = access_token
+            refresh_token.save()
+
+            expired = Q(refresh_token__isnull=True, expires__lt=timezone.now(),
+                        user=refresh_token.user)
+            AccessToken.objects.filter(expired).delete()
 
         # No refresh token should be created, just access token
         else:
