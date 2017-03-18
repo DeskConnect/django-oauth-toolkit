@@ -344,12 +344,24 @@ class OAuth2Validator(RequestValidator):
 
             # If we are to reuse tokens, and we can: do so
             if access_token:
-                access_token.user = request.user
-                access_token.scope = token['scope']
-                access_token.expires = expires
-                access_token.token = token['access_token']
-                access_token.application = request.client
-                access_token.save()
+                # access_token.user = request.user
+                # access_token.scope = token['scope']
+                # access_token.expires = expires
+                # access_token.token = token['access_token']
+                # access_token.application = request.client
+                # access_token.save()
+
+                new_access_token = self._create_access_token(expires, request, token)
+                
+                refresh_token = access_token.refresh_token
+                refresh_token.access_token = new_access_token
+                refresh_token.save()
+
+                expired = Q(refresh_token__isnull=True, expires__lt=timezone.now(),
+                            user=access_token.user)
+                AccessToken.objects.filter(expired).delete()
+
+                access_token = new_access_token
 
             # else create fresh with access & refresh tokens
             else:
